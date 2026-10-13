@@ -27,4 +27,26 @@ public class BibleService {
                 .retrieve()
                 .body(JsonNode.class);
     }
+
+
+    public JsonNode getPassage(String bibleId, String passageId) {
+        return restClient.get()
+                .uri("/bibles/{bibleId}/passages/{passageId}?content-type=text",
+                        bibleId, passageId)
+                .retrieve()
+                .body(JsonNode.class);
+    }
+
+
+    public JsonNode searchBible(String bibleId, String query) {
+        return restClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/bibles/{bibleId}/search")
+                        .queryParam("query", query)
+                        .build(bibleId))
+                .retrieve()
+                .body(JsonNode.class);
+    }
+
+
 }
