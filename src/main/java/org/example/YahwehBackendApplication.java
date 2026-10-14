@@ -9,16 +9,21 @@ import io.github.cdimascio.dotenv.Dotenv;
 public class YahwehBackendApplication {
 
     public static void main(String[] args) {
+        loadEnvironmentVariables();
+
+        SpringApplication.run(YahwehBackendApplication.class, args);
+    }
+
+    private static void loadEnvironmentVariables() {
         Dotenv dotenv = Dotenv.configure()
                 .ignoreIfMissing()
                 .load();
 
-        String apiKey = dotenv.get("API_BIBLE_KEY");
-
-        if (apiKey != null && !apiKey.isBlank()) {
-            System.setProperty("API_BIBLE_KEY", apiKey);
-        }
-
-        SpringApplication.run(YahwehBackendApplication.class, args);
+        dotenv.entries().forEach(entry -> {
+            if (System.getProperty(entry.getKey()) == null
+                    && System.getenv(entry.getKey()) == null) {
+                System.setProperty(entry.getKey(), entry.getValue());
+            }
+        });
     }
 }
