@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Reading Statistics", description = "Daily, weekly, monthly stats and activity-by-hour breakdown")
 @RestController
 @RequestMapping("/api/reading-statistics")
 public class ReadingStatisticsController {

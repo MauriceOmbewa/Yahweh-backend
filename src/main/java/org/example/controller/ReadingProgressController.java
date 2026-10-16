@@ -19,6 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Reading Progress", description = "Mark chapters as read, track history, and sync across devices")
 @RestController
 @RequestMapping("/api/reading-progress")
 public class ReadingProgressController {

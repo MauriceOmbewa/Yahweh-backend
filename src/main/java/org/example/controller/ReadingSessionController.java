@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Reading Sessions", description = "Start and end timed reading sessions")
 @RestController
 @RequestMapping("/api/reading-sessions")
 public class ReadingSessionController {

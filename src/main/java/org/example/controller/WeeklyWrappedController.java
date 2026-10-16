@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Weekly Wrapped", description = "Spotify-style weekly reading summaries with milestones")
 @RestController
 @RequestMapping("/api/wrapped")
 public class WeeklyWrappedController {

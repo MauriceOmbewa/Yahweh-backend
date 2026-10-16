@@ -20,4 +20,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT u FROM AppUser u WHERE u.id = :userId")
     Optional<AppUser> findByIdForUpdate(@Param("userId") UUID userId);
+
+    Optional<AppUser> findByGoogleId(String googleId);
+
+    Optional<AppUser> findByPasswordResetTokenHash(String tokenHash);
 }

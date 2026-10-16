@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Block", description = "Block and unblock users; view your blocked list")
 @RestController
 @RequestMapping("/api/users")
 public class UserBlockController {

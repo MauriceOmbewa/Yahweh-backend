@@ -17,6 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Friends", description = "Send, accept, decline friend requests and manage your friends list")
 @RestController
 @RequestMapping("/api/friends")
 public class FriendshipController {

@@ -13,6 +13,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Bible", description = "Fetch Bible translations, passages and search")
 @RestController
 @Validated
 public class BibleController {

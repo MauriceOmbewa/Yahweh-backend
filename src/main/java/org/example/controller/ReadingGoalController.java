@@ -11,8 +11,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 
+@Tag(name = "Reading Goals", description = "Set a daily reading goal and track today's progress")
 @RestController
 @RequestMapping("/api/reading-goals")
 public class ReadingGoalController {

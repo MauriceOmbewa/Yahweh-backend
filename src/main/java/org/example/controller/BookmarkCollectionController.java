@@ -25,6 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Bookmark Collections", description = "Organise saved verses into named collections")
 @RestController
 @RequestMapping("/api/bookmark-collections")
 public class BookmarkCollectionController {

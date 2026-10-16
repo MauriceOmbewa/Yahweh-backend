@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Notifications", description = "In-app notifications: list, unread count, mark read")
 @RestController
 @RequestMapping("/api/notifications")
 public class NotificationController {

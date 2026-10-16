@@ -18,6 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "My Profile", description = "Update display name, avatar, timezone, and status verse")
 @RestController
 @RequestMapping("/api/users/me")
 public class UserController {

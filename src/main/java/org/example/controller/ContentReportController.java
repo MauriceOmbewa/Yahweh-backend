@@ -22,6 +22,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Moderation", description = "Report posts and users; admin review queue")
 @RestController
 @RequestMapping("/api/reports")
 public class ContentReportController {

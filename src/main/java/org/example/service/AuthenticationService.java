@@ -1,67 +1,68 @@
-
 package org.example.service;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
+import io.jsonwebtoken.JwtException;
+import org.example.dto.AuthTokenResponse;
 import org.example.model.AppUser;
-import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.UUID;
 
+/**
+ * Stateless JWT-based authentication.
+ * Replaces the old session-based implementation.
+ */
 @Service
 public class AuthenticationService {
 
     private final AppUserService appUserService;
+    private final JwtService jwtService;
 
-    public AuthenticationService(AppUserService appUserService) {
+    @Value("${jwt.access-token-expiry-seconds:900}")
+    private long accessTokenExpirySeconds;
+
+    public AuthenticationService(
+            AppUserService appUserService,
+            JwtService jwtService
+    ) {
         this.appUserService = appUserService;
+        this.jwtService = jwtService;
     }
 
-    public AppUser login(
-            String email,
-            String password,
-            HttpServletRequest request) {
-
+    /**
+     * Validates credentials and returns a token pair.
+     */
+    public AuthTokenResponse login(String email, String password) {
         AppUser user = appUserService.authenticate(email, password);
-
-        var authentication = new UsernamePasswordAuthenticationToken(
-                user.getId().toString(),
-                null,
-                List.of(new SimpleGrantedAuthority("ROLE_USER"))
-        );
-
-        SecurityContext context = SecurityContextHolder.createEmptyContext();
-        context.setAuthentication(authentication);
-        SecurityContextHolder.setContext(context);
-
-        HttpSession session = request.getSession(true);
-        session.setAttribute(
-                HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY,
-                context
-        );
-
-        return user;
+        return issueTokens(user);
     }
 
-    public void logout(
-            HttpServletRequest request,
-            HttpServletResponse response) {
+    /**
+     * Issues a new token pair from a valid refresh token.
+     * Throws IllegalArgumentException if the refresh token is invalid/expired.
+     */
+    public AuthTokenResponse refresh(String refreshToken) {
+        String userIdStr;
+        try {
+            userIdStr = jwtService.validateRefreshToken(refreshToken);
+        } catch (JwtException e) {
+            throw new IllegalArgumentException(
+                    "Invalid or expired refresh token. Please log in again.");
+        }
 
-        SecurityContextLogoutHandler logoutHandler =
-                new SecurityContextLogoutHandler();
+        AppUser user = appUserService.findById(UUID.fromString(userIdStr))
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
-        logoutHandler.logout(
-                request,
-                response,
-                SecurityContextHolder.getContext().getAuthentication()
-        );
+        return issueTokens(user);
     }
 
+    /**
+     * Builds an AuthTokenResponse for the given user.
+     * Shared by login, register, Google sign-in, and token refresh.
+     */
+    public AuthTokenResponse issueTokens(AppUser user) {
+        String accessToken  = jwtService.generateAccessToken(user.getId());
+        String refreshToken = jwtService.generateRefreshToken(user.getId());
+        return AuthTokenResponse.of(accessToken, refreshToken, accessTokenExpirySeconds, user);
+    }
 }

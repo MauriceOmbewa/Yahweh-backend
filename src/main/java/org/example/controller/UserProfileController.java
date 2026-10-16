@@ -15,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "User Profiles", description = "View public profiles and search for users")
 @RestController
 @RequestMapping("/api/users")
 public class UserProfileController {

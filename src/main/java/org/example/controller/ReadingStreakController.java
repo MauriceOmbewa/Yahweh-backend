@@ -14,8 +14,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import java.time.LocalDate;
 import java.util.List;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
 
+@Tag(name = "Reading Streak", description = "Current streak, longest streak, and reading calendar")
 @RestController
 @RequestMapping("/api/reading-streak")
 public class ReadingStreakController {

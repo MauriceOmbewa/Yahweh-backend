@@ -28,6 +28,9 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Posts", description = "Share verses, react, comment, and view your friends feed")
 @RestController
 @RequestMapping("/api/posts")
 public class PostController {

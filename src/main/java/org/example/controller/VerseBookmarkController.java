@@ -21,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+@Tag(name = "Bookmarks", description = "Save, highlight, and annotate Bible verses")
 @RestController
 @RequestMapping("/api/bookmarks")
 public class VerseBookmarkController {
