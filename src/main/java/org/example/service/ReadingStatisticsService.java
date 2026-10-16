@@ -1,19 +1,17 @@
 
 package org.example.service;
 
+import org.example.dto.ReadingActivityByHourResponse;
 import org.example.dto.ReadingStatisticsResponse;
 import org.example.model.ReadingSession;
 import org.example.repository.ReadingSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.example.dto.ReadingActivityByHourResponse;
-
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -34,49 +32,64 @@ public class ReadingStatisticsService {
             Instant periodStart,
             Instant periodEnd
     ) {
-        if (periodStart == null || periodEnd == null
-                || !periodStart.isBefore(periodEnd)) {
-            throw new IllegalArgumentException(
-                    "The period start must be before the period end."
-            );
-        }
+        validatePeriod(periodStart, periodEnd);
 
         List<ReadingSession> sessions =
-                readingSessionRepository
-                        .findAllByUser_IdAndStartedAtGreaterThanEqualAndStartedAtLessThan(
-                                userId,
-                                periodStart,
-                                periodEnd
-                        );
+                readingSessionRepository.findSessionsOverlappingPeriod(
+                        userId,
+                        periodStart,
+                        periodEnd
+                );
+
+        Instant now = Instant.now();
 
         long totalReadingSeconds = 0;
+        long totalCompletedSessionSeconds = 0;
         long completedSessions = 0;
         long activeSessions = 0;
 
         for (ReadingSession session : sessions) {
-            Instant endedAt = session.getEndedAt();
+            Instant sessionStart = session.getStartedAt();
+            Instant sessionEnd = session.getEndedAt();
 
-            if (endedAt == null) {
+            Instant effectiveStart = sessionStart.isAfter(periodStart)
+                    ? sessionStart
+                    : periodStart;
+
+            Instant effectiveEnd;
+
+            if (sessionEnd == null) {
                 activeSessions++;
-                continue;
+                effectiveEnd = now.isBefore(periodEnd) ? now : periodEnd;
+            } else {
+                effectiveEnd = sessionEnd.isBefore(periodEnd)
+                        ? sessionEnd
+                        : periodEnd;
+
+                // Count completed sessions whose end time falls in this period.
+                if (!sessionEnd.isBefore(periodStart)
+                        && sessionEnd.isBefore(periodEnd)) {
+                    completedSessions++;
+                    totalCompletedSessionSeconds += Duration.between(
+                            sessionStart,
+                            sessionEnd
+                    ).getSeconds();
+                }
             }
 
-            completedSessions++;
+            if (effectiveEnd.isAfter(effectiveStart)) {
+                long durationSeconds = Duration.between(
+                        effectiveStart,
+                        effectiveEnd
+                ).getSeconds();
 
-            long durationSeconds = Math.max(
-                    0L,
-                    Duration.between(
-                            session.getStartedAt(),
-                            endedAt
-                    ).getSeconds()
-            );
-
-            totalReadingSeconds += durationSeconds;
+                totalReadingSeconds += durationSeconds;
+            }
         }
 
         long averageSessionSeconds = completedSessions == 0
                 ? 0
-                : totalReadingSeconds / completedSessions;
+                : totalCompletedSessionSeconds / completedSessions;
 
         return new ReadingStatisticsResponse(
                 periodStart,
@@ -95,41 +108,78 @@ public class ReadingStatisticsService {
             Instant periodStart,
             Instant periodEnd
     ) {
-        if (periodStart == null || periodEnd == null
-                || !periodStart.isBefore(periodEnd)) {
-            throw new IllegalArgumentException(
-                    "The period start must be before the period end."
-            );
-        }
+        validatePeriod(periodStart, periodEnd);
 
         List<ReadingSession> sessions =
-                readingSessionRepository
-                        .findAllByUser_IdAndStartedAtGreaterThanEqualAndStartedAtLessThan(
-                                userId,
-                                periodStart,
-                                periodEnd
-                        );
+                readingSessionRepository.findSessionsOverlappingPeriod(
+                        userId,
+                        periodStart,
+                        periodEnd
+                );
+
+        Instant now = Instant.now();
 
         long[] sessionCounts = new long[24];
         long[] readingSeconds = new long[24];
 
         for (ReadingSession session : sessions) {
-            int hour = session.getStartedAt()
-                    .atZone(ZoneOffset.UTC)
-                    .getHour();
+            Instant sessionStart = session.getStartedAt();
+            Instant sessionEnd = session.getEndedAt();
 
-            sessionCounts[hour]++;
+            // Count a session in the hour when it actually started,
+            // provided its start is inside the requested period.
+            if (!sessionStart.isBefore(periodStart)
+                    && sessionStart.isBefore(periodEnd)) {
+                int startHour = sessionStart
+                        .atZone(ZoneOffset.UTC)
+                        .getHour();
 
-            if (session.getEndedAt() != null) {
-                long duration = Math.max(
-                        0L,
-                        Duration.between(
-                                session.getStartedAt(),
-                                session.getEndedAt()
-                        ).getSeconds()
-                );
+                sessionCounts[startHour]++;
+            }
 
-                readingSeconds[hour] += duration;
+            Instant effectiveStart = sessionStart.isAfter(periodStart)
+                    ? sessionStart
+                    : periodStart;
+
+            Instant effectiveEnd;
+
+            if (sessionEnd == null) {
+                effectiveEnd = now.isBefore(periodEnd) ? now : periodEnd;
+            } else {
+                effectiveEnd = sessionEnd.isBefore(periodEnd)
+                        ? sessionEnd
+                        : periodEnd;
+            }
+
+            if (!effectiveEnd.isAfter(effectiveStart)) {
+                continue;
+            }
+
+            // Distribute the duration across each UTC hour it overlaps.
+            Instant cursor = effectiveStart;
+
+            while (cursor.isBefore(effectiveEnd)) {
+                Instant hourStart = cursor
+                        .atZone(ZoneOffset.UTC)
+                        .withMinute(0)
+                        .withSecond(0)
+                        .withNano(0)
+                        .toInstant();
+
+                Instant nextHour = hourStart.plus(Duration.ofHours(1));
+
+                Instant segmentEnd = effectiveEnd.isBefore(nextHour)
+                        ? effectiveEnd
+                        : nextHour;
+
+                int hour = cursor.atZone(ZoneOffset.UTC).getHour();
+
+                readingSeconds[hour] += Duration.between(
+                        cursor,
+                        segmentEnd
+                ).getSeconds();
+
+                cursor = segmentEnd;
             }
         }
 
@@ -144,5 +194,17 @@ public class ReadingStatisticsService {
         }
 
         return results;
+    }
+
+    private void validatePeriod(
+            Instant periodStart,
+            Instant periodEnd
+    ) {
+        if (periodStart == null || periodEnd == null
+                || !periodStart.isBefore(periodEnd)) {
+            throw new IllegalArgumentException(
+                    "The period start must be before the period end."
+            );
+        }
     }
 }

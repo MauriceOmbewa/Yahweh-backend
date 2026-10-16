@@ -10,7 +10,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 @Service
@@ -27,25 +26,29 @@ public class ReadingSessionService {
         this.appUserRepository = appUserRepository;
     }
 
+
     @Transactional
     public ReadingSession startSession(UUID userId, String bibleId) {
         String normalizedBibleId = normalizeBibleId(bibleId);
+
+        // Lock this user's database row to serialize concurrent start requests.
+        AppUser user = appUserRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        Instant now = Instant.now();
 
         // Close any existing active session before starting another.
         readingSessionRepository
                 .findFirstByUser_IdAndEndedAtIsNullOrderByStartedAtDesc(userId)
                 .ifPresent(existingSession -> {
-                    existingSession.setEndedAt(Instant.now());
+                    existingSession.setEndedAt(now);
                     readingSessionRepository.save(existingSession);
                 });
-
-        AppUser user = appUserRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
         ReadingSession session = new ReadingSession();
         session.setUser(user);
         session.setBibleId(normalizedBibleId);
-        session.setStartedAt(Instant.now());
+        session.setStartedAt(now);
 
         return readingSessionRepository.save(session);
     }
@@ -107,6 +110,6 @@ public class ReadingSessionService {
             );
         }
 
-        return normalized.toLowerCase(Locale.ROOT);
+        return normalized;
     }
 }

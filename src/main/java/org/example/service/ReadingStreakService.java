@@ -1,21 +1,20 @@
 
 package org.example.service;
 
-import org.example.dto.ReadingStreakResponse;
 import org.example.dto.ReadingDayResponse;
+import org.example.dto.ReadingStreakResponse;
 import org.example.model.ReadingSession;
 import org.example.repository.ReadingSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeSet;
 import java.util.UUID;
@@ -40,25 +39,19 @@ public class ReadingStreakService {
         NavigableSet<LocalDate> readingDates = new TreeSet<>();
 
         for (ReadingSession session : sessions) {
-            // Only completed sessions count toward a reading streak.
             if (session.getEndedAt() == null) {
                 continue;
             }
 
-            LocalDate readingDate = session.getStartedAt()
-                    .atZone(ZoneOffset.UTC)
-                    .toLocalDate();
-
-            readingDates.add(readingDate);
+            addReadingDates(
+                    readingDates,
+                    session.getStartedAt(),
+                    session.getEndedAt()
+            );
         }
 
         if (readingDates.isEmpty()) {
-            return new ReadingStreakResponse(
-                    0,
-                    0,
-                    0,
-                    null
-            );
+            return new ReadingStreakResponse(0, 0, 0, null);
         }
 
         LocalDate lastReadingDate = readingDates.last();
@@ -66,9 +59,9 @@ public class ReadingStreakService {
 
         int currentStreak = 0;
 
-        // A streak remains current if the last reading day was today
-        // or yesterday. Otherwise, the current streak is zero.
-        if (!lastReadingDate.isBefore(today.minusDays(1))) {
+        if (!lastReadingDate.isBefore(today.minusDays(1))
+                && !lastReadingDate.isAfter(today)) {
+
             LocalDate expectedDate = lastReadingDate;
 
             for (LocalDate date : readingDates.descendingSet()) {
@@ -118,35 +111,52 @@ public class ReadingStreakService {
             );
         }
 
-        Instant start = startDate
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant();
-
-        Instant end = endDate
-                .plusDays(1)
+        Instant start = startDate.atStartOfDay(ZoneOffset.UTC).toInstant();
+        Instant end = endDate.plusDays(1)
                 .atStartOfDay(ZoneOffset.UTC)
                 .toInstant();
 
         List<ReadingSession> sessions =
-                readingSessionRepository
-                        .findAllByUser_IdAndStartedAtGreaterThanEqualAndStartedAtLessThan(
-                                userId,
-                                start,
-                                end
-                        );
+                readingSessionRepository.findSessionsOverlappingPeriod(
+                        userId,
+                        start,
+                        end
+                );
 
         Map<LocalDate, Long> completedSessionsByDate = new HashMap<>();
 
         for (ReadingSession session : sessions) {
-            if (session.getEndedAt() == null) {
+            Instant sessionEnd = session.getEndedAt();
+
+            if (sessionEnd == null
+                    || !sessionEnd.isAfter(session.getStartedAt())) {
                 continue;
             }
 
-            LocalDate date = session.getStartedAt()
+            LocalDate firstDate = session.getStartedAt()
                     .atZone(ZoneOffset.UTC)
                     .toLocalDate();
 
-            completedSessionsByDate.merge(date, 1L, Long::sum);
+            // The session end is exclusive. If it ends exactly at
+            // midnight, that next day does not receive a session count.
+            LocalDate lastDate = sessionEnd.minusNanos(1)
+                    .atZone(ZoneOffset.UTC)
+                    .toLocalDate();
+
+            LocalDate firstIncluded = firstDate.isBefore(startDate)
+                    ? startDate
+                    : firstDate;
+
+            LocalDate lastIncluded = lastDate.isAfter(endDate)
+                    ? endDate
+                    : lastDate;
+
+            for (LocalDate date = firstIncluded;
+                 !date.isAfter(lastIncluded);
+                 date = date.plusDays(1)) {
+
+                completedSessionsByDate.merge(date, 1L, Long::sum);
+            }
         }
 
         List<ReadingDayResponse> calendar = new ArrayList<>();
@@ -168,4 +178,28 @@ public class ReadingStreakService {
         return calendar;
     }
 
+    private void addReadingDates(
+            NavigableSet<LocalDate> readingDates,
+            Instant startedAt,
+            Instant endedAt
+    ) {
+        if (startedAt == null || endedAt == null
+                || !endedAt.isAfter(startedAt)) {
+            return;
+        }
+
+        LocalDate firstDate = startedAt
+                .atZone(ZoneOffset.UTC)
+                .toLocalDate();
+
+        LocalDate lastDate = endedAt.minusNanos(1)
+                .atZone(ZoneOffset.UTC)
+                .toLocalDate();
+
+        for (LocalDate date = firstDate;
+             !date.isAfter(lastDate);
+             date = date.plusDays(1)) {
+            readingDates.add(date);
+        }
+    }
 }

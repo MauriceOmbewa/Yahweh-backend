@@ -7,6 +7,7 @@ import org.example.dto.BookmarkCollectionResponse;
 import org.example.model.BookmarkCollection;
 import org.example.service.BookmarkCollectionService;
 import org.example.dto.AddVerseToCollectionRequest;
+import org.example.dto.VerseBookmarkResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;

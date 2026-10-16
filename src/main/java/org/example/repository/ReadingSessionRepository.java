@@ -3,6 +3,8 @@ package org.example.repository;
 
 import org.example.model.ReadingSession;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
 import java.util.List;
@@ -27,6 +29,19 @@ public interface ReadingSessionRepository
             UUID userId,
             Instant start,
             Instant end
+    );
+
+    @Query("""
+    SELECT s FROM ReadingSession s
+    WHERE s.user.id = :userId
+      AND s.startedAt < :periodEnd
+      AND (s.endedAt IS NULL OR s.endedAt > :periodStart)
+    ORDER BY s.startedAt DESC
+    """)
+    List<ReadingSession> findSessionsOverlappingPeriod(
+            @Param("userId") UUID userId,
+            @Param("periodStart") Instant periodStart,
+            @Param("periodEnd") Instant periodEnd
     );
 
     long countByUser_Id(UUID userId);
