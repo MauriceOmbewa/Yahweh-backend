@@ -1,6 +1,7 @@
 package org.example.service;
 
 import org.example.model.AppUser;
+import org.example.model.NotificationType;
 import org.example.model.Post;
 import org.example.model.PostComment;
 import org.example.model.PostReaction;
@@ -20,7 +21,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-
 @Service
 public class PostService {
 
@@ -32,19 +32,25 @@ public class PostService {
     private final PostCommentRepository commentRepository;
     private final AppUserRepository appUserRepository;
     private final FriendshipRepository friendshipRepository;
+    private final NotificationService notificationService;
+    private final UserBlockService userBlockService;
 
     public PostService(
             PostRepository postRepository,
             PostReactionRepository reactionRepository,
             PostCommentRepository commentRepository,
             AppUserRepository appUserRepository,
-            FriendshipRepository friendshipRepository
+            FriendshipRepository friendshipRepository,
+            NotificationService notificationService,
+            UserBlockService userBlockService
     ) {
         this.postRepository = postRepository;
         this.reactionRepository = reactionRepository;
         this.commentRepository = commentRepository;
         this.appUserRepository = appUserRepository;
         this.friendshipRepository = friendshipRepository;
+        this.notificationService = notificationService;
+        this.userBlockService = userBlockService;
     }
 
     // -------------------------------------------------------------------------
@@ -91,11 +97,16 @@ public class PostService {
         return post;
     }
 
-    /** Paginated friend feed: posts from friends + own posts, newest first. */
+    /** Paginated friend feed: posts from friends + own posts, newest first, blocking enforced. */
     @Transactional(readOnly = true)
     public Page<Post> getFeed(UUID userId, int page, int size) {
         List<UUID> friendIds = friendshipRepository.findFriendIds(userId);
-        return postRepository.findFeedForUser(userId, friendIds, PageRequest.of(page, size));
+        // Remove any friends that have been blocked in either direction.
+        Set<UUID> blockedIds = userBlockService.getBlockedUserIds(userId);
+        List<UUID> visibleFriendIds = friendIds.stream()
+                .filter(id -> !blockedIds.contains(id))
+                .toList();
+        return postRepository.findFeedForUser(userId, visibleFriendIds, PageRequest.of(page, size));
     }
 
     /** All posts by a specific user (only own posts or accepted friends). */
@@ -139,7 +150,14 @@ public class PostService {
                 });
 
         reaction.setReactionType(normalizedType);
-        return reactionRepository.save(reaction);
+        PostReaction saved = reactionRepository.save(reaction);
+
+        // Notify the post author (skip if reacting to own post).
+        notificationService.dispatch(
+                post.getUser().getId(), NotificationType.POST_REACTION,
+                userId, post.getId());
+
+        return saved;
     }
 
     @Transactional
@@ -187,7 +205,14 @@ public class PostService {
         comment.setPost(post);
         comment.setUser(findUser(userId));
         comment.setBody(body.trim());
-        return commentRepository.save(comment);
+        PostComment saved = commentRepository.save(comment);
+
+        // Notify the post author (skip if commenting on own post).
+        notificationService.dispatch(
+                post.getUser().getId(), NotificationType.POST_COMMENT,
+                userId, post.getId());
+
+        return saved;
     }
 
     @Transactional

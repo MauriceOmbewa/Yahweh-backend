@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -18,25 +19,35 @@ public class UserProfileService {
     private final AppUserRepository appUserRepository;
     private final FriendshipService friendshipService;
     private final ReadingStreakService readingStreakService;
+    private final UserBlockService userBlockService;
 
     public UserProfileService(
             AppUserRepository appUserRepository,
             FriendshipService friendshipService,
-            ReadingStreakService readingStreakService
+            ReadingStreakService readingStreakService,
+            UserBlockService userBlockService
     ) {
         this.appUserRepository = appUserRepository;
         this.friendshipService = friendshipService;
         this.readingStreakService = readingStreakService;
+        this.userBlockService = userBlockService;
     }
 
     /**
      * Returns the public profile of a user.
-     * The streak is only included when the viewer is the owner or an accepted friend.
+     * Throws if the viewer has been blocked by the target or vice versa.
      */
     @Transactional(readOnly = true)
     public AppUser getProfile(UUID targetUserId, UUID viewerId) {
-        return appUserRepository.findById(targetUserId)
+        AppUser target = appUserRepository.findById(targetUserId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
+
+        if (!targetUserId.equals(viewerId)
+                && userBlockService.isBlocked(viewerId, targetUserId)) {
+            throw new IllegalArgumentException("User not found.");
+        }
+
+        return target;
     }
 
     /**
@@ -56,7 +67,7 @@ public class UserProfileService {
 
     /**
      * Searches users by display name (case-insensitive, partial match).
-     * Excludes the searching user from results.
+     * Excludes the searching user and any blocked users from results.
      */
     @Transactional(readOnly = true)
     public Page<AppUser> searchUsers(String query, UUID excludeUserId, int page, int size) {
@@ -68,11 +79,11 @@ public class UserProfileService {
         }
 
         String normalized = query.trim().toLowerCase();
+        Set<UUID> blockedIds = userBlockService.getBlockedUserIds(excludeUserId);
 
-        // Simple in-memory filter — fine at this scale; can be replaced with a
-        // DB ILIKE query once the user base grows.
         List<AppUser> matches = appUserRepository.findAll().stream()
                 .filter(u -> !u.getId().equals(excludeUserId))
+                .filter(u -> !blockedIds.contains(u.getId()))
                 .filter(u -> u.getDisplayName().toLowerCase().contains(normalized))
                 .toList();
 

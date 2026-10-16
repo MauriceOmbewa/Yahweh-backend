@@ -3,6 +3,7 @@ package org.example.service;
 import org.example.model.AppUser;
 import org.example.model.Friendship;
 import org.example.model.FriendshipStatus;
+import org.example.model.NotificationType;
 import org.example.repository.AppUserRepository;
 import org.example.repository.FriendshipRepository;
 import org.springframework.stereotype.Service;
@@ -17,13 +18,16 @@ public class FriendshipService {
 
     private final FriendshipRepository friendshipRepository;
     private final AppUserRepository appUserRepository;
+    private final NotificationService notificationService;
 
     public FriendshipService(
             FriendshipRepository friendshipRepository,
-            AppUserRepository appUserRepository
+            AppUserRepository appUserRepository,
+            NotificationService notificationService
     ) {
         this.friendshipRepository = friendshipRepository;
         this.appUserRepository = appUserRepository;
+        this.notificationService = notificationService;
     }
 
     // -------------------------------------------------------------------------
@@ -62,7 +66,14 @@ public class FriendshipService {
         friendship.setRequester(requester);
         friendship.setAddressee(addressee);
         friendship.setStatus(FriendshipStatus.PENDING);
-        return friendshipRepository.save(friendship);
+        Friendship saved = friendshipRepository.save(friendship);
+
+        // Notify the addressee that they have a new friend request.
+        notificationService.dispatch(
+                addresseeId, NotificationType.FRIEND_REQUEST,
+                requesterId, saved.getId());
+
+        return saved;
     }
 
     @Transactional
@@ -77,7 +88,15 @@ public class FriendshipService {
         }
 
         friendship.setStatus(FriendshipStatus.ACCEPTED);
-        return friendshipRepository.save(friendship);
+        Friendship saved = friendshipRepository.save(friendship);
+
+        // Notify the original requester that their request was accepted.
+        notificationService.dispatch(
+                friendship.getRequester().getId(),
+                NotificationType.FRIEND_REQUEST_ACCEPTED,
+                currentUserId, saved.getId());
+
+        return saved;
     }
 
     @Transactional
