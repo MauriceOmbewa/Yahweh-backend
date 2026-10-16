@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -94,15 +94,22 @@ public class ReadingGoalService {
                 .map(ReadingGoal::getDailyGoalMinutes)
                 .orElse(DEFAULT_DAILY_GOAL_MINUTES);
 
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        // Use the user's stored timezone so "today" matches their local day.
+        ZoneId zone = appUserRepository.findById(userId)
+                .map(AppUser::getTimezone)
+                .map(tz -> {
+                    try {
+                        return ZoneId.of(tz);
+                    } catch (Exception e) {
+                        return ZoneId.of("UTC");
+                    }
+                })
+                .orElse(ZoneId.of("UTC"));
 
-        Instant startOfDay = today
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant();
+        LocalDate today = LocalDate.now(zone);
 
-        Instant startOfNextDay = today.plusDays(1)
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant();
+        Instant startOfDay = today.atStartOfDay(zone).toInstant();
+        Instant startOfNextDay = today.plusDays(1).atStartOfDay(zone).toInstant();
 
         Instant now = Instant.now();
 
@@ -126,36 +133,25 @@ public class ReadingGoalService {
             Instant effectiveEnd;
 
             if (sessionEnd == null) {
-                effectiveEnd = now.isBefore(startOfNextDay)
-                        ? now
-                        : startOfNextDay;
+                effectiveEnd = now.isBefore(startOfNextDay) ? now : startOfNextDay;
             } else {
                 effectiveEnd = sessionEnd.isBefore(startOfNextDay)
                         ? sessionEnd
                         : startOfNextDay;
             }
 
-            // Never count time before the session or outside today.
             if (effectiveEnd.isAfter(effectiveStart)) {
-                totalReadingSeconds += Duration.between(
-                        effectiveStart,
-                        effectiveEnd
-                ).getSeconds();
+                totalReadingSeconds += Duration.between(effectiveStart, effectiveEnd)
+                        .getSeconds();
             }
         }
 
         long goalSeconds = dailyGoalMinutes * 60L;
-
-        long remainingSeconds = Math.max(
-                0L,
-                goalSeconds - totalReadingSeconds
-        );
-
+        long remainingSeconds = Math.max(0L, goalSeconds - totalReadingSeconds);
         double progressPercentage = Math.min(
                 100.0,
                 totalReadingSeconds * 100.0 / goalSeconds
         );
-
         boolean goalReached = totalReadingSeconds >= goalSeconds;
 
         return new ReadingGoalProgressResponse(

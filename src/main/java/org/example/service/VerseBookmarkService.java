@@ -5,6 +5,9 @@ import org.example.model.AppUser;
 import org.example.model.VerseBookmark;
 import org.example.repository.AppUserRepository;
 import org.example.repository.VerseBookmarkRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -82,6 +85,13 @@ public class VerseBookmarkService {
     public List<VerseBookmark> getUserVerses(UUID userId) {
         return verseBookmarkRepository
                 .findAllByUser_IdOrderByCreatedAtDesc(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VerseBookmark> getUserVerses(UUID userId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return verseBookmarkRepository
+                .findAllByUser_IdOrderByCreatedAtDesc(userId, pageable);
     }
 
     @Transactional(readOnly = true)

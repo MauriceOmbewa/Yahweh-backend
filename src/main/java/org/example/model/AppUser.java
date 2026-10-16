@@ -33,6 +33,24 @@ public class AppUser {
     @Column(name = "avatar_url", length = 1000)
     private String avatarUrl;
 
+    @Column(name = "timezone", nullable = false, length = 64)
+    private String timezone = "UTC";
+
+    @Column(name = "status_verse_id", length = 150)
+    private String statusVerseId;
+
+    @Column(name = "status_bible_id", length = 100)
+    private String statusBibleId;
+
+    @Column(name = "status_verse_text", columnDefinition = "TEXT")
+    private String statusVerseText;
+
+    @Column(name = "status_caption", length = 280)
+    private String statusCaption;
+
+    @Column(name = "status_updated_at")
+    private Instant statusUpdatedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -88,6 +106,54 @@ public class AppUser {
 
     public void setAvatarUrl(String avatarUrl) {
         this.avatarUrl = avatarUrl;
+    }
+
+    public String getTimezone() {
+        return timezone;
+    }
+
+    public void setTimezone(String timezone) {
+        this.timezone = timezone;
+    }
+
+    public String getStatusVerseId() {
+        return statusVerseId;
+    }
+
+    public void setStatusVerseId(String statusVerseId) {
+        this.statusVerseId = statusVerseId;
+    }
+
+    public String getStatusBibleId() {
+        return statusBibleId;
+    }
+
+    public void setStatusBibleId(String statusBibleId) {
+        this.statusBibleId = statusBibleId;
+    }
+
+    public String getStatusVerseText() {
+        return statusVerseText;
+    }
+
+    public void setStatusVerseText(String statusVerseText) {
+        this.statusVerseText = statusVerseText;
+    }
+
+    public String getStatusCaption() {
+        return statusCaption;
+    }
+
+    public void setStatusCaption(String statusCaption) {
+        this.statusCaption = statusCaption;
+    }
+
+    public Instant getStatusUpdatedAt() {
+        return statusUpdatedAt;
+    }
+
+    public void setStatusUpdatedAt(Instant statusUpdatedAt) {
+        this.statusUpdatedAt = statusUpdatedAt;
     }
 
     public Instant getCreatedAt() {

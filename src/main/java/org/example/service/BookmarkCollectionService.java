@@ -9,6 +9,9 @@ import org.example.repository.BookmarkCollectionVerseRepository;
 import org.example.repository.VerseBookmarkRepository;
 import org.example.repository.AppUserRepository;
 import org.example.repository.BookmarkCollectionRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -204,6 +207,21 @@ public class BookmarkCollectionService {
                 .stream()
                 .map(BookmarkCollectionVerse::getVerseBookmark)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public Page<VerseBookmark> getCollectionVerses(
+            UUID userId,
+            UUID collectionId,
+            int page,
+            int size
+    ) {
+        getCollection(userId, collectionId);
+
+        Pageable pageable = PageRequest.of(page, size);
+        return collectionVerseRepository
+                .findAllByCollection_IdOrderByAddedAtDesc(collectionId, pageable)
+                .map(BookmarkCollectionVerse::getVerseBookmark);
     }
 
     @Transactional

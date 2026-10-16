@@ -5,6 +5,9 @@ import org.example.model.AppUser;
 import org.example.model.ReadingProgress;
 import org.example.repository.AppUserRepository;
 import org.example.repository.ReadingProgressRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,6 +63,12 @@ public class ReadingProgressService {
     public List<ReadingProgress> getReadingHistory(UUID userId) {
         return readingProgressRepository
                 .findAllByUser_IdOrderByReadAtDesc(userId);
+    }
+
+    public Page<ReadingProgress> getReadingHistory(UUID userId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+        return readingProgressRepository
+                .findAllByUser_IdOrderByReadAtDesc(userId, pageable);
     }
 
     public boolean hasReadChapter(

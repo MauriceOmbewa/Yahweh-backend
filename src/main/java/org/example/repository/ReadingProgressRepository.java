@@ -2,6 +2,8 @@
 package org.example.repository;
 
 import org.example.model.ReadingProgress;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -17,9 +19,9 @@ public interface ReadingProgressRepository
             String chapterId
     );
 
-    List<ReadingProgress> findAllByUser_IdOrderByReadAtDesc(
-            UUID userId
-    );
+    List<ReadingProgress> findAllByUser_IdOrderByReadAtDesc(UUID userId);
+
+    Page<ReadingProgress> findAllByUser_IdOrderByReadAtDesc(UUID userId, Pageable pageable);
 
     boolean existsByUser_IdAndBibleIdAndChapterId(
             UUID userId,

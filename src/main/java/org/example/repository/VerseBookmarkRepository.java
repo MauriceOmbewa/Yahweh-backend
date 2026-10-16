@@ -2,6 +2,8 @@
 package org.example.repository;
 
 import org.example.model.VerseBookmark;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -17,9 +19,9 @@ public interface VerseBookmarkRepository
             String verseId
     );
 
-    List<VerseBookmark> findAllByUser_IdOrderByCreatedAtDesc(
-            UUID userId
-    );
+    List<VerseBookmark> findAllByUser_IdOrderByCreatedAtDesc(UUID userId);
+
+    Page<VerseBookmark> findAllByUser_IdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
     boolean existsByUser_IdAndBibleIdAndVerseId(
             UUID userId,

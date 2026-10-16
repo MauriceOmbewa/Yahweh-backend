@@ -1,6 +1,7 @@
-
 package org.example.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import org.example.dto.PagedResponse;
 import org.example.dto.ReadingProgressResponse;
 import org.example.dto.ReadingProgressStatusResponse;
 import org.example.model.ReadingProgress;
@@ -13,9 +14,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -24,74 +25,75 @@ public class ReadingProgressController {
 
     private final ReadingProgressService readingProgressService;
 
-    public ReadingProgressController(
-            ReadingProgressService readingProgressService) {
+    public ReadingProgressController(ReadingProgressService readingProgressService) {
         this.readingProgressService = readingProgressService;
     }
 
+    @Operation(summary = "Mark a chapter as read")
     @PostMapping("/{bibleId}/chapters/{chapterId}")
     public ResponseEntity<ReadingProgressResponse> markChapterAsRead(
             @PathVariable String bibleId,
             @PathVariable String chapterId,
             Authentication authentication) {
 
-        UUID userId = getAuthenticatedUserId(authentication);
-
-        ReadingProgress progress =
-                readingProgressService.markChapterAsRead(
-                        userId, bibleId, chapterId);
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(ReadingProgressResponse.from(progress));
+        UUID userId = getUserId(authentication);
+        ReadingProgress progress = readingProgressService.markChapterAsRead(userId, bibleId, chapterId);
+        return ResponseEntity.status(HttpStatus.CREATED).body(ReadingProgressResponse.from(progress));
     }
 
+    @Operation(
+            summary = "Get reading history",
+            description = "Returns a paginated list of chapters marked as read, newest first. "
+                    + "Defaults to page 0, 20 items per page."
+    )
     @GetMapping
-    public ResponseEntity<List<ReadingProgressResponse>> getReadingHistory(
+    public ResponseEntity<PagedResponse<ReadingProgressResponse>> getReadingHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
 
-        UUID userId = getAuthenticatedUserId(authentication);
+        UUID userId = getUserId(authentication);
 
-        List<ReadingProgressResponse> history =
-                readingProgressService.getReadingHistory(userId)
-                        .stream()
-                        .map(ReadingProgressResponse::from)
-                        .toList();
+        PagedResponse<ReadingProgressResponse> response = PagedResponse.from(
+                readingProgressService.getReadingHistory(userId, page, size),
+                ReadingProgressResponse::from
+        );
 
-        return ResponseEntity.ok(history);
+        return ResponseEntity.ok(response);
     }
 
+    @Operation(summary = "Get total chapters read count")
+    @GetMapping("/count")
+    public ResponseEntity<Long> getReadingCount(Authentication authentication) {
+        UUID userId = getUserId(authentication);
+        return ResponseEntity.ok(readingProgressService.countReadChapters(userId));
+    }
+
+    @Operation(summary = "Check whether a specific chapter has been read")
     @GetMapping("/{bibleId}/chapters/{chapterId}")
     public ResponseEntity<ReadingProgressStatusResponse> getChapterStatus(
             @PathVariable String bibleId,
             @PathVariable String chapterId,
             Authentication authentication) {
 
-        UUID userId = getAuthenticatedUserId(authentication);
-
-        boolean read = readingProgressService.hasReadChapter(
-                userId, bibleId, chapterId);
-
-        return ResponseEntity.ok(
-                new ReadingProgressStatusResponse(
-                        bibleId, chapterId, read));
+        UUID userId = getUserId(authentication);
+        boolean read = readingProgressService.hasReadChapter(userId, bibleId, chapterId);
+        return ResponseEntity.ok(new ReadingProgressStatusResponse(bibleId, chapterId, read));
     }
 
+    @Operation(summary = "Mark a chapter as unread")
     @DeleteMapping("/{bibleId}/chapters/{chapterId}")
     public ResponseEntity<Void> markChapterAsUnread(
             @PathVariable String bibleId,
             @PathVariable String chapterId,
             Authentication authentication) {
 
-        UUID userId = getAuthenticatedUserId(authentication);
-
-        readingProgressService.markChapterAsUnread(
-                userId, bibleId, chapterId);
-
+        UUID userId = getUserId(authentication);
+        readingProgressService.markChapterAsUnread(userId, bibleId, chapterId);
         return ResponseEntity.noContent().build();
     }
 
-    private UUID getAuthenticatedUserId(Authentication authentication) {
+    private UUID getUserId(Authentication authentication) {
         return UUID.fromString(authentication.getName());
     }
 }

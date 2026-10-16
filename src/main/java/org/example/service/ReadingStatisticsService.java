@@ -1,16 +1,20 @@
-
 package org.example.service;
 
 import org.example.dto.ReadingActivityByHourResponse;
 import org.example.dto.ReadingStatisticsResponse;
+import org.example.model.AppUser;
 import org.example.model.ReadingSession;
+import org.example.repository.AppUserRepository;
 import org.example.repository.ReadingSessionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.Instant;
-import java.time.ZoneOffset;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -19,12 +23,62 @@ import java.util.UUID;
 public class ReadingStatisticsService {
 
     private final ReadingSessionRepository readingSessionRepository;
+    private final AppUserRepository appUserRepository;
 
     public ReadingStatisticsService(
-            ReadingSessionRepository readingSessionRepository
+            ReadingSessionRepository readingSessionRepository,
+            AppUserRepository appUserRepository
     ) {
         this.readingSessionRepository = readingSessionRepository;
+        this.appUserRepository = appUserRepository;
     }
+
+    // -------------------------------------------------------------------------
+    // Convenience methods — period boundaries derived from the user's timezone
+    // -------------------------------------------------------------------------
+
+    @Transactional(readOnly = true)
+    public ReadingStatisticsResponse getDailyStatistics(UUID userId) {
+        ZoneId zone = resolveZone(userId);
+        LocalDate today = LocalDate.now(zone);
+        Instant start = today.atStartOfDay(zone).toInstant();
+        Instant end = today.plusDays(1).atStartOfDay(zone).toInstant();
+        return getStatistics(userId, start, end);
+    }
+
+    @Transactional(readOnly = true)
+    public ReadingStatisticsResponse getWeeklyStatistics(UUID userId) {
+        ZoneId zone = resolveZone(userId);
+        LocalDate today = LocalDate.now(zone);
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        Instant start = weekStart.atStartOfDay(zone).toInstant();
+        Instant end = weekStart.plusWeeks(1).atStartOfDay(zone).toInstant();
+        return getStatistics(userId, start, end);
+    }
+
+    @Transactional(readOnly = true)
+    public ReadingStatisticsResponse getMonthlyStatistics(UUID userId) {
+        ZoneId zone = resolveZone(userId);
+        LocalDate today = LocalDate.now(zone);
+        LocalDate monthStart = today.withDayOfMonth(1);
+        Instant start = monthStart.atStartOfDay(zone).toInstant();
+        Instant end = monthStart.plusMonths(1).atStartOfDay(zone).toInstant();
+        return getStatistics(userId, start, end);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ReadingActivityByHourResponse> getWeeklyActivityByHour(UUID userId) {
+        ZoneId zone = resolveZone(userId);
+        LocalDate today = LocalDate.now(zone);
+        LocalDate weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        Instant start = weekStart.atStartOfDay(zone).toInstant();
+        Instant end = weekStart.plusWeeks(1).atStartOfDay(zone).toInstant();
+        return getActivityByHour(userId, start, end, zone);
+    }
+
+    // -------------------------------------------------------------------------
+    // Core calculation methods (accept explicit period bounds)
+    // -------------------------------------------------------------------------
 
     @Transactional(readOnly = true)
     public ReadingStatisticsResponse getStatistics(
@@ -36,10 +90,7 @@ public class ReadingStatisticsService {
 
         List<ReadingSession> sessions =
                 readingSessionRepository.findSessionsOverlappingPeriod(
-                        userId,
-                        periodStart,
-                        periodEnd
-                );
+                        userId, periodStart, periodEnd);
 
         Instant now = Instant.now();
 
@@ -66,24 +117,17 @@ public class ReadingStatisticsService {
                         ? sessionEnd
                         : periodEnd;
 
-                // Count completed sessions whose end time falls in this period.
-                if (!sessionEnd.isBefore(periodStart)
-                        && sessionEnd.isBefore(periodEnd)) {
+                // Count a completed session whose end falls inside the period.
+                if (!sessionEnd.isBefore(periodStart) && sessionEnd.isBefore(periodEnd)) {
                     completedSessions++;
-                    totalCompletedSessionSeconds += Duration.between(
-                            sessionStart,
-                            sessionEnd
-                    ).getSeconds();
+                    totalCompletedSessionSeconds +=
+                            Duration.between(sessionStart, sessionEnd).getSeconds();
                 }
             }
 
             if (effectiveEnd.isAfter(effectiveStart)) {
-                long durationSeconds = Duration.between(
-                        effectiveStart,
-                        effectiveEnd
-                ).getSeconds();
-
-                totalReadingSeconds += durationSeconds;
+                totalReadingSeconds +=
+                        Duration.between(effectiveStart, effectiveEnd).getSeconds();
             }
         }
 
@@ -108,14 +152,25 @@ public class ReadingStatisticsService {
             Instant periodStart,
             Instant periodEnd
     ) {
+        ZoneId zone = resolveZone(userId);
+        return getActivityByHour(userId, periodStart, periodEnd, zone);
+    }
+
+    // -------------------------------------------------------------------------
+    // Private helpers
+    // -------------------------------------------------------------------------
+
+    private List<ReadingActivityByHourResponse> getActivityByHour(
+            UUID userId,
+            Instant periodStart,
+            Instant periodEnd,
+            ZoneId zone
+    ) {
         validatePeriod(periodStart, periodEnd);
 
         List<ReadingSession> sessions =
                 readingSessionRepository.findSessionsOverlappingPeriod(
-                        userId,
-                        periodStart,
-                        periodEnd
-                );
+                        userId, periodStart, periodEnd);
 
         Instant now = Instant.now();
 
@@ -126,14 +181,9 @@ public class ReadingStatisticsService {
             Instant sessionStart = session.getStartedAt();
             Instant sessionEnd = session.getEndedAt();
 
-            // Count a session in the hour when it actually started,
-            // provided its start is inside the requested period.
-            if (!sessionStart.isBefore(periodStart)
-                    && sessionStart.isBefore(periodEnd)) {
-                int startHour = sessionStart
-                        .atZone(ZoneOffset.UTC)
-                        .getHour();
-
+            // Attribute a session to the local hour it started in.
+            if (!sessionStart.isBefore(periodStart) && sessionStart.isBefore(periodEnd)) {
+                int startHour = sessionStart.atZone(zone).getHour();
                 sessionCounts[startHour]++;
             }
 
@@ -146,24 +196,20 @@ public class ReadingStatisticsService {
             if (sessionEnd == null) {
                 effectiveEnd = now.isBefore(periodEnd) ? now : periodEnd;
             } else {
-                effectiveEnd = sessionEnd.isBefore(periodEnd)
-                        ? sessionEnd
-                        : periodEnd;
+                effectiveEnd = sessionEnd.isBefore(periodEnd) ? sessionEnd : periodEnd;
             }
 
             if (!effectiveEnd.isAfter(effectiveStart)) {
                 continue;
             }
 
-            // Distribute the duration across each UTC hour it overlaps.
+            // Distribute the duration across each local hour it overlaps.
             Instant cursor = effectiveStart;
 
             while (cursor.isBefore(effectiveEnd)) {
-                Instant hourStart = cursor
-                        .atZone(ZoneOffset.UTC)
-                        .withMinute(0)
-                        .withSecond(0)
-                        .withNano(0)
+                // Snap cursor back to the start of its local hour.
+                Instant hourStart = cursor.atZone(zone)
+                        .withMinute(0).withSecond(0).withNano(0)
                         .toInstant();
 
                 Instant nextHour = hourStart.plus(Duration.ofHours(1));
@@ -172,39 +218,44 @@ public class ReadingStatisticsService {
                         ? effectiveEnd
                         : nextHour;
 
-                int hour = cursor.atZone(ZoneOffset.UTC).getHour();
-
-                readingSeconds[hour] += Duration.between(
-                        cursor,
-                        segmentEnd
-                ).getSeconds();
+                int hour = cursor.atZone(zone).getHour();
+                readingSeconds[hour] +=
+                        Duration.between(cursor, segmentEnd).getSeconds();
 
                 cursor = segmentEnd;
             }
         }
 
         List<ReadingActivityByHourResponse> results = new ArrayList<>();
-
         for (int hour = 0; hour < 24; hour++) {
             results.add(new ReadingActivityByHourResponse(
-                    hour,
-                    sessionCounts[hour],
-                    readingSeconds[hour]
-            ));
+                    hour, sessionCounts[hour], readingSeconds[hour]));
         }
-
         return results;
     }
 
-    private void validatePeriod(
-            Instant periodStart,
-            Instant periodEnd
-    ) {
+    /**
+     * Resolves the user's stored IANA timezone, falling back to UTC if the
+     * record is missing or the stored value is somehow invalid.
+     */
+    private ZoneId resolveZone(UUID userId) {
+        return appUserRepository.findById(userId)
+                .map(AppUser::getTimezone)
+                .map(tz -> {
+                    try {
+                        return ZoneId.of(tz);
+                    } catch (Exception e) {
+                        return ZoneId.of("UTC");
+                    }
+                })
+                .orElse(ZoneId.of("UTC"));
+    }
+
+    private void validatePeriod(Instant periodStart, Instant periodEnd) {
         if (periodStart == null || periodEnd == null
                 || !periodStart.isBefore(periodEnd)) {
             throw new IllegalArgumentException(
-                    "The period start must be before the period end."
-            );
+                    "The period start must be before the period end.");
         }
     }
 }
